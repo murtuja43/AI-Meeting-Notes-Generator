@@ -1,0 +1,48 @@
+// Prisma schema for AI Meeting Notes Generator.
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Lifecycle of a meeting through the AI pipeline.
+/// PENDING    -> uploaded, not yet processed
+/// PROCESSING -> transcription + summarization in progress
+/// COMPLETED  -> transcript, summary and action items are ready
+/// FAILED     -> processing errored (see `errorMessage`)
+enum MeetingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+/// A single uploaded meeting and its AI-generated artifacts.
+model Meeting {
+  id        String        @id @default(cuid())
+  title     String
+  audioUrl  String
+  /// Cloudinary public_id, kept so we can delete/transform the asset later.
+  audioPublicId String?
+  status    MeetingStatus @default(PENDING)
+
+  // --- AI-generated content (null until processing completes) ---
+  transcript String? @db.Text
+  summary    String? @db.Text
+  /// Structured action items stored as JSON: Array<{ task, owner?, priority }>.
+  actionItems Json?
+
+  /// Populated when status = FAILED so the UI can show what went wrong.
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdAt])
+  @@index([status])
+}

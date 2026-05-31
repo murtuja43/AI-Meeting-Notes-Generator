@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(git init *)",
+      "Bash(npm init *)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('next',p.dependencies.next,'| react',p.dependencies.react,'| tailwind',p.devDependencies.tailwindcss,'| prisma',p.devDependencies.prisma,'| openai',p.dependencies.openai,'| zod',p.dependencies.zod\\)\")",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('prisma',p.devDependencies.prisma,'| @prisma/client',p.dependencies['@prisma/client']\\)\")",
+      "Bash(npx prisma *)",
+      "Bash(npx next *)"
+    ]
+  }
+}
