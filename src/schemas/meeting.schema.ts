@@ -8,7 +8,9 @@ import { z } from "zod";
  */
 
 // --- Constants used for upload validation ---
-export const MAX_AUDIO_BYTES = 25 * 1024 * 1024; // 25MB (OpenAI Whisper limit)
+// Upload cap. faster-whisper has no hard size limit, but we bound uploads so a
+// single request can't buffer an unbounded file into memory. Tune as needed.
+export const MAX_AUDIO_BYTES = 25 * 1024 * 1024; // 25MB
 export const ACCEPTED_AUDIO_TYPES = [
   "audio/mpeg", // .mp3
   "audio/mp4", // .m4a

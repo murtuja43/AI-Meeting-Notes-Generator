@@ -7,7 +7,12 @@
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('next',p.dependencies.next,'| react',p.dependencies.react,'| tailwind',p.devDependencies.tailwindcss,'| prisma',p.devDependencies.prisma,'| openai',p.dependencies.openai,'| zod',p.dependencies.zod\\)\")",
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('prisma',p.devDependencies.prisma,'| @prisma/client',p.dependencies['@prisma/client']\\)\")",
       "Bash(npx prisma *)",
-      "Bash(npx next *)"
+      "Bash(npx next *)",
+      "Bash(npm uninstall *)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('ollama', p.dependencies.ollama, '| openai', p.dependencies.openai\\)\")",
+      "Bash(grep -rni \"openai\" src)",
+      "Bash(grep -rni \"openai\" .env .env.example)",
+      "Bash(ls node_modules/openai)"
     ]
   }
 }

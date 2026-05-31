@@ -1,0 +1,10 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# faster-whisper / huggingface model cache (can be large)
+.cache/
+models/

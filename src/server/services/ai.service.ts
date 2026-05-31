@@ -1,5 +1,4 @@
-import { toFile } from "openai";
-import { openai } from "@/lib/openai";
+import { ollama } from "@/lib/ollama";
 import { env } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import {
@@ -8,69 +7,75 @@ import {
 } from "@/schemas/meeting.schema";
 
 /**
- * AI service — all OpenAI interactions live here:
- *   1. transcribe()  -> Whisper speech-to-text
- *   2. generateInsights() -> GPT summary + action items (structured JSON)
+ * AI service — all model interactions live here:
+ *   1. transcribe()       -> faster-whisper, via the Python transcription sidecar
+ *   2. generateInsights() -> Ollama + Llama 3 (summary + action items, JSON)
  *
- * Keeping both behind one service means prompts, model names, and error
- * handling are in a single, testable place.
+ * Both run on local/self-hosted infrastructure (no third-party AI API). The rest
+ * of the app is unaware of this — it just calls these two methods, exactly as
+ * before. That isolation is why swapping OpenAI for local models touched only
+ * this file plus the two clients it imports.
  */
 export const aiService = {
   /**
-   * Transcribe audio located at a public URL (our Cloudinary asset) using
-   * Whisper. We download the bytes and hand them to the OpenAI SDK as a File.
+   * Transcribe audio located at a public URL (our Cloudinary asset).
+   *
+   * faster-whisper is a Python library, so transcription runs in a small FastAPI
+   * sidecar (see `transcription-service/`). We POST the audio URL; the service
+   * downloads the file, runs faster-whisper, and returns the text. This keeps
+   * Node free of any Python/ML dependencies and lets transcription scale (and
+   * use a GPU) independently.
    */
   async transcribe(audioUrl: string): Promise<string> {
     try {
-      const response = await fetch(audioUrl);
-      if (!response.ok) {
-        throw new Error(`Could not fetch audio (HTTP ${response.status})`);
-      }
-      const arrayBuffer = await response.arrayBuffer();
-
-      // Derive a filename+extension so the API can infer the audio container.
-      const filename = filenameFromUrl(audioUrl);
-      const file = await toFile(Buffer.from(arrayBuffer), filename);
-
-      const transcription = await openai.audio.transcriptions.create({
-        file,
-        model: env.OPENAI_TRANSCRIBE_MODEL,
-        response_format: "text",
+      const response = await fetch(`${env.TRANSCRIPTION_SERVICE_URL}/transcribe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audioUrl }),
       });
 
-      // With response_format: "text", the SDK returns a plain string.
-      const text = typeof transcription === "string" ? transcription : "";
-      const trimmed = text.trim();
-      if (!trimmed) {
-        throw new Error("Whisper returned an empty transcript");
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        throw new Error(
+          `Transcription service responded ${response.status}: ${detail}`,
+        );
       }
-      return trimmed;
+
+      const data = (await response.json()) as { text?: string };
+      const text = (data.text ?? "").trim();
+      if (!text) {
+        throw new Error("Transcription service returned an empty transcript");
+      }
+      return text;
     } catch (error) {
       console.error("[ai] Transcription failed:", error);
       throw new AppError(
         "AI_PROCESSING_FAILED",
-        "Failed to transcribe the audio. The file may be corrupt or unsupported.",
+        "Failed to transcribe the audio. Is the transcription service running?",
       );
     }
   },
 
   /**
-   * Generate a concise summary and structured action items from a transcript.
-   * Uses JSON mode so the model must return valid JSON, which we then validate
-   * against `meetingInsightsSchema` — if the shape is wrong, we fail rather than
-   * persist garbage.
+   * Generate a concise summary and structured action items from a transcript
+   * using Llama 3 via Ollama.
+   *
+   * We use Ollama's JSON `format` mode so the model must return syntactically
+   * valid JSON, then validate that JSON against `meetingInsightsSchema` — if the
+   * shape is wrong, we fail instead of persisting garbage. (Same safety contract
+   * we had with GPT's JSON mode.)
    */
   async generateInsights(transcript: string): Promise<MeetingInsights> {
     try {
-      const completion = await openai.chat.completions.create({
-        model: env.OPENAI_CHAT_MODEL,
-        temperature: 0.2,
-        response_format: { type: "json_object" },
+      const response = await ollama.chat({
+        model: env.OLLAMA_MODEL,
+        // Force valid JSON output. The system prompt MUST also instruct the
+        // model to emit JSON, otherwise Ollama can stall generating whitespace.
+        format: "json",
+        stream: false,
+        options: { temperature: 0.2 },
         messages: [
-          {
-            role: "system",
-            content: SYSTEM_PROMPT,
-          },
+          { role: "system", content: SYSTEM_PROMPT },
           {
             role: "user",
             content: `Here is the meeting transcript. Produce the JSON described.\n\n"""${transcript}"""`,
@@ -78,9 +83,9 @@ export const aiService = {
         ],
       });
 
-      const raw = completion.choices[0]?.message?.content;
+      const raw = response.message?.content;
       if (!raw) {
-        throw new Error("GPT returned no content");
+        throw new Error("Ollama returned no content");
       }
 
       const parsedJson = JSON.parse(raw) as unknown;
@@ -90,7 +95,7 @@ export const aiService = {
       console.error("[ai] Insight generation failed:", error);
       throw new AppError(
         "AI_PROCESSING_FAILED",
-        "Failed to generate the summary and action items from the transcript.",
+        "Failed to generate the summary and action items. Is Ollama running with the Llama 3 model pulled?",
       );
     }
   },
@@ -116,14 +121,3 @@ Rules:
 - Keep the summary neutral and information-dense.
 - If there are no action items, return an empty "actionItems" array.
 - Output ONLY the JSON object, no markdown, no commentary.`;
-
-/** Build a safe filename (with extension) Whisper can use to detect format. */
-function filenameFromUrl(url: string): string {
-  try {
-    const pathname = new URL(url).pathname;
-    const last = pathname.split("/").pop() || "audio";
-    return /\.[a-z0-9]+$/i.test(last) ? last : `${last}.mp3`;
-  } catch {
-    return "audio.mp3";
-  }
-}

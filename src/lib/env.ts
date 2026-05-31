@@ -15,10 +15,18 @@ const envSchema = z.object({
   // Database
   DATABASE_URL: z.string().url("DATABASE_URL must be a valid connection URL"),
 
-  // OpenAI
-  OPENAI_API_KEY: z.string().min(1, "OPENAI_API_KEY is required"),
-  OPENAI_CHAT_MODEL: z.string().min(1).default("gpt-4o-mini"),
-  OPENAI_TRANSCRIBE_MODEL: z.string().min(1).default("whisper-1"),
+  // Transcription service (Python FastAPI wrapper around faster-whisper)
+  TRANSCRIPTION_SERVICE_URL: z
+    .string()
+    .url("TRANSCRIPTION_SERVICE_URL must be a valid URL")
+    .default("http://localhost:8000"),
+
+  // Ollama (local LLM server) — used for summary + action-item extraction
+  OLLAMA_BASE_URL: z
+    .string()
+    .url("OLLAMA_BASE_URL must be a valid URL")
+    .default("http://localhost:11434"),
+  OLLAMA_MODEL: z.string().min(1).default("llama3"),
 
   // Cloudinary
   CLOUDINARY_CLOUD_NAME: z.string().min(1, "CLOUDINARY_CLOUD_NAME is required"),
@@ -33,9 +41,9 @@ const envSchema = z.object({
  */
 const parsed = envSchema.safeParse({
   DATABASE_URL: process.env.DATABASE_URL,
-  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-  OPENAI_CHAT_MODEL: process.env.OPENAI_CHAT_MODEL,
-  OPENAI_TRANSCRIBE_MODEL: process.env.OPENAI_TRANSCRIBE_MODEL,
+  TRANSCRIPTION_SERVICE_URL: process.env.TRANSCRIPTION_SERVICE_URL,
+  OLLAMA_BASE_URL: process.env.OLLAMA_BASE_URL,
+  OLLAMA_MODEL: process.env.OLLAMA_MODEL,
   CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME,
   CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY,
   CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET,
